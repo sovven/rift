@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#07060f">
+<title>裂隙 Rift</title>
+<meta name="description" content="用手把现实撕开一道口子。手势 + 摄像头的网页实验。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23efe8da'/%3E%3Cpath d='M34 4 L28 18 L36 27 L27 38 L35 47 L30 60 L40 60 L44 46 L37 38 L45 27 L38 17 L43 4Z' fill='%2307060f'/%3E%3C/svg%3E">
+<style>
+:root{
+  --paper:#efe8da; --paper-2:#e4dccb; --ink:#1d1a16; --ink-2:#5b544a;
+  --ember:#ff7a2e; --night:#07060f; --star:#e9ecff;
+  --serif:"Songti SC","STSong","Noto Serif SC","Source Han Serif SC","SimSun",serif;
+  --hand:"Kaiti SC","STKaiti","KaiTi","Noto Serif SC",serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--night);color:var(--star);overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none;
+  font-family:var(--serif)}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#ov{pointer-events:none}
+video{position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;left:0;top:0}
+
+/* HUD: painted on the scene, no boxes */
+.hud{position:fixed;z-index:5;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.85),0 0 12px rgba(0,0,0,.55)}
+#brand{left:calc(18px + env(safe-area-inset-left));top:calc(14px + env(safe-area-inset-top))}
+#brand b{font-size:22px;letter-spacing:.32em;font-weight:700}
+#status{display:block;margin-top:4px;font-size:12.5px;color:rgba(233,236,255,.78);letter-spacing:.06em;max-width:62vw}
+#menu{right:calc(16px + env(safe-area-inset-right));top:calc(14px + env(safe-area-inset-top));
+  display:flex;flex-direction:column;align-items:flex-end;gap:2px;pointer-events:auto}
+#menu button{all:unset;cursor:pointer;font-family:var(--serif);font-size:15px;letter-spacing:.28em;
+  padding:6px 0 6px 10px;color:rgba(233,236,255,.86);text-shadow:inherit;position:relative}
+#menu button:hover,#menu button.on{color:#fff}
+#menu button.on::after{content:"";position:absolute;right:.28em;left:10px;bottom:3px;height:1px;background:var(--ember);box-shadow:0 0 6px var(--ember)}
+#menu button:focus-visible{outline:1px dashed var(--ember);outline-offset:2px}
+#hint{left:50%;bottom:calc(26px + env(safe-area-inset-bottom));transform:translateX(-50%);
+  font-family:var(--hand);font-size:17px;letter-spacing:.1em;color:#fff;white-space:nowrap;
+  transition:opacity .6s;opacity:.92;text-align:center}
+#banner{left:0;right:0;top:40%;text-align:center;font-size:30px;letter-spacing:.4em;font-weight:700;
+  opacity:0;transition:opacity .5s, transform .8s;transform:translateY(8px)}
+#banner.show{opacity:1;transform:none}
+#banner small{display:block;font-size:13px;letter-spacing:.2em;font-weight:400;margin-top:10px;color:rgba(233,236,255,.8)}
+#rec{left:50%;top:calc(16px + env(safe-area-inset-top));transform:translateX(-50%);font-family:var(--mono);
+  font-size:13px;letter-spacing:.2em;color:#ffb38a;display:none}
+#rec::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff4a2a;margin-right:8px;
+  box-shadow:0 0 8px #ff4a2a;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.2}}
+
+/* torn paper scraps for panels */
+.scrap{position:fixed;z-index:8;right:calc(18px + env(safe-area-inset-right));top:calc(64px + env(safe-area-inset-top));
+  width:min(320px,calc(100vw - 36px));padding:22px 22px 24px;color:var(--ink);
+  background:var(--paper);display:none;pointer-events:auto;filter:drop-shadow(0 10px 22px rgba(0,0,0,.55));
+  transform:rotate(-1.2deg);font-family:var(--serif)}
+.scrap.open{display:block;animation:drop .35s cubic-bezier(.2,1.4,.4,1)}
+@keyframes drop{from{transform:rotate(-4deg) translateY(-14px);opacity:0}}
+.scrap h3{font-size:17px;letter-spacing:.24em;margin-bottom:12px}
+.scrap p{font-family:var(--hand);font-size:14.5px;line-height:1.6;color:var(--ink-2)}
+.scrap input,.scrap textarea{all:unset;display:block;width:100%;font-family:var(--hand);font-size:22px;color:var(--ink);
+  border-bottom:1.5px solid var(--ink);padding:6px 2px;margin:10px 0 4px;-webkit-user-select:text;user-select:text}
+.scrap textarea{font-size:18px;min-height:64px;white-space:pre-wrap}
+.scrap input::placeholder,.scrap textarea::placeholder{color:#a69e90}
+.scrap .row{display:flex;gap:18px;margin-top:14px;flex-wrap:wrap}
+.scrap .act{all:unset;cursor:pointer;font-size:15px;letter-spacing:.2em;border-bottom:1.5px solid var(--ember);padding:2px 0;color:var(--ink)}
+.scrap .act:focus-visible{outline:1px dashed var(--ink)}
+.scrap .x{all:unset;cursor:pointer;position:absolute;right:14px;top:10px;font-size:20px;color:var(--ink-2)}
+.scrap .note{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);margin-top:12px;word-break:break-all;-webkit-user-select:text;user-select:text}
+
+/* title: a sheet of paper you tear open */
+#start{position:fixed;inset:0;z-index:20;cursor:pointer}
+#start .half{position:absolute;inset:0;background:var(--paper);
+  background-image:radial-gradient(120% 90% at 50% 40%,rgba(255,255,255,.35),rgba(0,0,0,.08)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .3  0 0 0 0 .26  0 0 0 0 .2  0 0 0 .16 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+  transition:transform 1.25s cubic-bezier(.6,0,.2,1), opacity 1.25s}
+#start.torn .left{transform:translate(-62%,4%) rotate(-7deg)}
+#start.torn .right{transform:translate(62%,-3%) rotate(6deg)}
+#start.torn{pointer-events:none}
+#start.gone{display:none}
+#start .ink{position:absolute;inset:0;color:var(--ink);pointer-events:none}
+#title{position:absolute;left:calc(12vw);top:16vh;writing-mode:vertical-rl;font-size:clamp(64px,13vw,120px);
+  font-weight:700;letter-spacing:.18em;line-height:1}
+#sub{position:absolute;left:calc(12vw + clamp(64px,13vw,120px) + 18px);top:17vh;writing-mode:vertical-rl;
+  font-family:var(--hand);font-size:clamp(16px,2.4vw,20px);letter-spacing:.3em;color:var(--ink-2)}
+#crack{position:absolute;left:50%;top:0;height:100%;width:60px;transform:translateX(-50%);overflow:visible}
+#press{position:absolute;left:50%;bottom:16vh;transform:translateX(-50%);background:var(--paper);padding:10px 14px;font-family:var(--hand);font-size:19px;
+  letter-spacing:.24em;white-space:nowrap;animation:breathe 2.4s ease-in-out infinite}
+#press small{display:block;text-align:center;font-family:var(--serif);font-size:12px;letter-spacing:.18em;color:var(--ink-2);margin-top:10px}
+@keyframes breathe{50%{opacity:.45}}
+#letterNote{position:absolute;right:10vw;top:18vh;writing-mode:vertical-rl;font-family:var(--hand);font-size:20px;
+  letter-spacing:.3em;color:#9b3b1a;display:none}
+@media (max-width:600px){
+  #title{left:9vw;top:12vh}
+  #sub{left:calc(9vw + 13vw + 64px)}
+  #hint{font-size:15px;white-space:normal;width:86vw}
+  #banner{font-size:24px}
+}
+@media (prefers-reduced-motion:reduce){#press{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="ov"></canvas>
+<video id="cam" playsinline muted autoplay></video>
+<input id="photo" type="file" accept="image/*" hidden>
+
+<div id="brand" class="hud"><b>裂隙</b><span id="status">正在醒来</span></div>
+<nav id="menu" class="hud" aria-label="功能">
+  <button data-act="room">投送</button>
+  <button data-act="letter">写信</button>
+  <button data-act="rec">录制</button>
+  <button data-act="heal">愈合</button>
+  <button data-act="flip">换镜头</button>
+  <button data-act="photo">换现实</button>
+</nav>
+<div id="hint" class="hud"></div>
+<div id="banner" class="hud"></div>
+<div id="rec" class="hud">REC 10</div>
+
+<section id="roomPanel" class="scrap" aria-label="隔空投送">
+  <button class="x" data-close>×</button>
+  <h3>隔空投送</h3>
+  <p>两台设备输入同一个房间号。把手里抓起的东西甩出屏幕边缘，它会从对面飞出来。</p>
+  <input id="roomCode" inputmode="numeric" maxlength="4" placeholder="四位数字" autocomplete="off">
+  <div class="row"><button class="act" id="roomJoin">进入房间</button><button class="act" id="roomRand">随机一个</button></div>
+  <div class="note" id="roomState">还没连接</div>
+</section>
+
+<section id="letterPanel" class="scrap" aria-label="藏在现实背后的信">
+  <button class="x" data-close>×</button>
+  <h3>藏一句话</h3>
+  <p>写下一句话，发给 TA。TA 要亲手撕开自己房间的画面，才能看到裂缝后面的字。</p>
+  <textarea id="letterText" maxlength="28" placeholder="比如：生日快乐，我一直都在"></textarea>
+  <div class="row"><button class="act" id="letterMake">生成链接</button><button class="act" id="letterTry">自己先试</button></div>
+  <div class="note" id="letterOut"></div>
+</section>
+
+<div id="start" role="button" aria-label="开始">
+  <div class="half left"></div><div class="half right"></div>
+  <div class="ink">
+    <div id="title">裂隙</div>
+    <div id="sub">把现实撕开一道口子</div>
+    <div id="letterNote">有人把一句话藏在了你的现实后面</div>
+    <svg id="crack" viewBox="0 0 60 1000" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M30 0 L24 90 L35 170 L22 260 L33 350 L26 430 L38 520 L25 610 L34 700 L23 790 L36 880 L28 1000"
+        fill="none" stroke="#1d1a16" stroke-width="1.6" stroke-dasharray="7 6" vector-effect="non-scaling-stroke"/>
+    </svg>
+    <div id="press">轻触这道裂缝，撕开它<small>需要摄像头 · 画面只在你的设备上处理，不会上传</small></div>
+  </div>
+</div>
+
+<script type="module" src="js/rift.js"></script>
+</body>
+</html>
