@@ -687,10 +687,12 @@ function setStatus(t) { statusEl.textContent = t; }
 // ---------- model loading ----------
 async function fetchBytes(url, onp) {
   const r = await fetch(url); if (!r.ok) throw new Error(url + ' ' + r.status);
+  // content-length can be the gzipped size (GitHub Pages), so collect chunks and only use it for progress
   const total = +r.headers.get('content-length') || 0; if (!r.body || !total) return new Uint8Array(await r.arrayBuffer());
-  const rd = r.body.getReader(); const out = new Uint8Array(total); let got = 0;
-  for (; ;) { const { done, value } = await rd.read(); if (done) break; out.set(value, got); got += value.length; onp(got / total); }
-  return out;
+  const rd = r.body.getReader(); const parts = []; let got = 0;
+  for (; ;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; onp(Math.min(.99, got / total)); }
+  const out = new Uint8Array(got); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  onp(1); return out;
 }
 async function loadModels() {
   const prog = [0, 0]; const show = () => { if (!modelsReady) setStatus(`手势识别加载中 ${Math.round((prog[0] * .55 + prog[1] * .45) * 100)}%`); };
